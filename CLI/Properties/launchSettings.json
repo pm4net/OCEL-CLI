@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "CLI": {
+      "commandName": "Project",
+      "commandLineArgs": "--of xml --if json cd --d / --o /"
+    }
+  }
+}
