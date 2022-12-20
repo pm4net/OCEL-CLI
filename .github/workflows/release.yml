@@ -47,7 +47,17 @@ jobs:
         tag_name: ${{ github.ref }}
         body_path: CHANGELOG.md
 
-    - name: upload linux artifact
+    - name: 'Upload Windows artifact'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ${{ env.PACKAGE_OUTPUT_DIRECTORY }}\win\CLI.exe
+        asset_name: Windows
+        asset_content_type: application/vnd.microsoft.portable-executable
+
+    - name: 'Upload Linux artifact'
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ github.token }}
@@ -55,4 +65,14 @@ jobs:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
         asset_path: ${{ env.PACKAGE_OUTPUT_DIRECTORY }}\linux\CLI
         asset_name: Linux
+        asset_content_type: application/gzip
+
+    - name: 'Upload OSX artifact'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ${{ env.PACKAGE_OUTPUT_DIRECTORY }}\osx\CLI
+        asset_name: OSX
         asset_content_type: application/gzip
