@@ -1,0 +1,58 @@
+name: "Build and Release"
+
+on:
+  push:
+    tags:
+    - 'v*'
+
+env:
+  PACKAGE_OUTPUT_DIRECTORY: ${{ github.workspace }}\output
+
+jobs:
+  release:
+    name: 'Release'
+    runs-on: 'windows-latest'
+    steps:
+    - name: 'Checkout'
+      uses: actions/checkout@v2
+
+    - name: 'Restore packages'
+      run: dotnet restore ${{ env.PROJECT_PATH }}
+
+    - name: 'Build project'
+      run: dotnet build ${{ env.PROJECT_PATH }} --no-restore
+
+    - name: 'Get Version'
+      id: version
+      uses: battila7/get-version-action@v2
+
+    - name: 'Publish for Windows'
+      run: dotnet publish -r win-x64 -c Release -o ${{ env.PACKAGE_OUTPUT_DIRECTORY }}\win -p:PublishReadyToRun=true -p:PublishSingleFile=true -p:PublishTrimmed=true --self-contained true -p:IncludeNativeLibrariesForSelfExtract=true
+
+    - name: 'Publish for Linux'
+      run: dotnet publish -r linux-x64 -c Release -o ${{ env.PACKAGE_OUTPUT_DIRECTORY }}\linux -p:PublishReadyToRun=true -p:PublishSingleFile=true -p:PublishTrimmed=true --self-contained true -p:IncludeNativeLibrariesForSelfExtract=true
+
+    - name: 'Publish for OSX'
+      run: dotnet publish -r osx-x64 -c Release -o ${{ env.PACKAGE_OUTPUT_DIRECTORY }}\osx -p:PublishReadyToRun=true -p:PublishSingleFile=true -p:PublishTrimmed=true --self-contained true -p:IncludeNativeLibrariesForSelfExtract=true
+
+    - name: 'Create release'
+      uses: actions/create-release@v1
+      id: create_release
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      with:
+        draft: false
+        prerelease: false
+        release_name: ${{ steps.version.outputs.version-without-v }}
+        tag_name: ${{ github.ref }}
+        body_path: CHANGELOG.md
+
+    - name: upload linux artifact
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ${{ env.PACKAGE_OUTPUT_DIRECTORY }}\linux\CLI
+        asset_name: Linux
+        asset_content_type: application/gzip
