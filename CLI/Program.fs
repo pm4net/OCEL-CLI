@@ -11,22 +11,34 @@ type OcelFormat =
 and ConvertDirArgs =
     | [<Mandatory; AltCommandLine("--d")>] Dir of string
     | [<Mandatory; AltCommandLine("--o")>] OutDir of string
+    | [<AltCommandLine("--if")>] InputFormat of OcelFormat option
 
     interface IArgParserTemplate with
         member this.Usage =
             match this with
             | Dir _ -> "The directory in which the OCEL files are located."
             | OutDir _ -> "The output directory in which to place the converted OCEL files."
+            | InputFormat _ -> "Only include files of the specified format."
 
 and ConvertMergeDirArgs =
     | [<Mandatory; AltCommandLine("--d")>] Dir of string
     | [<Mandatory; AltCommandLine("--o")>] Out of string
+    | [<AltCommandLine("--if")>] InputFormat of OcelFormat option
 
     interface IArgParserTemplate with
         member this.Usage =
             match this with
             | Dir _ -> "The directory in which the OCEL files are located."
             | Out _ -> "The output file to which the merged OCEL files are written."
+            | InputFormat _ -> "Only include files of the specified format."
+
+and ConvertFilesArgs =
+    | [<Mandatory; AltCommandLine("--f")>] Files of string list
+
+    interface IArgParserTemplate with
+        member this.Usage =
+            match this with
+            | Files _ -> "The OCEL files to convert. Will be placed in the same directory."
 
 and ConvertMergeFilesArgs =
     | [<Mandatory; AltCommandLine("--f")>] Files of string list
@@ -38,19 +50,8 @@ and ConvertMergeFilesArgs =
             | Files _ -> "The OCEL files to convert."
             | Out _ -> "The output file to which the merged OCEL files are written."
 
-and ConvertFilesArgs =
-    | [<Mandatory; AltCommandLine("--f")>] Files of string list
-
-    interface IArgParserTemplate with
-
-        member this.Usage =
-            match this with
-            | Files _ -> "The OCEL files to convert."
-
 and Args =
-    | Version
     | [<Mandatory; ExactlyOnce; AltCommandLine("--of")>] OutputFormat of OcelFormat
-    | [<AltCommandLine("--if")>] InputFormat of OcelFormat option
     | Indented
     | [<CliPrefix(CliPrefix.None); AltCommandLine("cd")>] ConvertDir of ParseResults<ConvertDirArgs>
     | [<CliPrefix(CliPrefix.None); AltCommandLine("cmd")>] ConvertMergeDir of ParseResults<ConvertMergeDirArgs>
@@ -60,9 +61,7 @@ and Args =
     interface IArgParserTemplate with
         member this.Usage =
             match this with
-            | Version -> "Prints the version of the OCEL CLI."
             | OutputFormat _ -> "Output format of the conversion."
-            | InputFormat _ -> "Only include files of the specified format."
             | Indented -> "Specifies that output files should be formatted using indentation."
             | ConvertDir _ -> "Convert a directory of OCEL files."
             | ConvertMergeDir _ -> "Convert and merge a directory of OCEL files into a single file."
@@ -114,6 +113,7 @@ let private getNewFileName (inputFile: string) (outDir: string) format =
 /// Read an OCEL file into a log object
 let private readOcelFile (path: string) =
     try
+        printfn $"Reading and deserializing {path}"
         match path with
         | p when p.EndsWith ".json" || p.EndsWith ".jsonocel" -> path |> File.ReadAllText |> OCEL.OcelJson.deserialize |> Some
         | p when p.EndsWith ".xml" || p.EndsWith ".xmlocel" -> path |> File.ReadAllText |> OCEL.OcelXml.deserialize |> Some
@@ -124,16 +124,39 @@ let private readOcelFile (path: string) =
         printfn $"Failed to read or deserialize file {path}: {e.Message}."
         None
 
+/// Read multiple OCEL files, merge them, and write them back to an output file in a specified format
+let private mergeAndWriteToFile outputFormat formatting files out =
+    let mergedLog =
+        files
+        |> List.map (fun f -> readOcelFile f)
+        |> List.choose id
+        |> fun files ->
+            printfn $"Merging {files.Length} files into one."
+            files
+        |> List.fold (fun (state: OCEL.Types.OcelLog) log -> state.MergeWith log) OCEL.Types.OcelLog.Empty
+
+    match outputFormat with
+    | OcelFormat.Json ->
+        let json = OCEL.OcelJson.serialize formatting mergedLog
+        printfn $"Writing log to {out}."
+        File.WriteAllText(out, json)
+    | OcelFormat.Xml ->
+        let xml = OCEL.OcelXml.serialize formatting mergedLog
+        printfn $"Writing log to {out}."
+        File.WriteAllText(out, xml)
+    | OcelFormat.LiteDb ->
+        let outDb = new LiteDatabase(out)
+        printfn $"Writing log to {out}."
+        OCEL.OcelLiteDB.serialize outDb mergedLog
+        outDb.Dispose()
+    | _ -> raise (new ArgumentOutOfRangeException(nameof(outputFormat)))
+
 [<EntryPoint>]
 let main args =
     let argParser = ArgumentParser.Create<Args>(programName = "ocel-cli")
     try
         let results = argParser.ParseCommandLine args
         let outputFormat = results.GetResult OutputFormat
-        let inputFormat = 
-            match results.TryGetResult InputFormat with
-            | Some(Some inputFormat) -> Some inputFormat
-            | _ -> None
         let formatting = if results.Contains Indented then OCEL.Types.Formatting.Indented else OCEL.Types.Formatting.None
 
         let cmds = 
@@ -146,6 +169,10 @@ let main args =
         | Some cd, None, None, None ->
             let dir = cd.GetResult ConvertDirArgs.Dir
             let outDir = cd.GetResult ConvertDirArgs.OutDir
+            let inputFormat =
+                match cd.TryGetResult ConvertDirArgs.InputFormat with
+                | Some(Some inputFormat) -> Some inputFormat
+                | _ -> None
             
             findFilesByFormat dir inputFormat
             |> fun files ->
@@ -171,41 +198,55 @@ let main args =
                         let outDb = new LiteDatabase(fileName)
                         printfn $"Writing log to {fileName}."
                         OCEL.OcelLiteDB.serialize outDb log
+                        outDb.Dispose()
                     | _ -> raise (new ArgumentOutOfRangeException(nameof(outputFormat)))
                 | None -> ()
             )
+
         | None, Some cmd, None, None ->
             let dir = cmd.GetResult ConvertMergeDirArgs.Dir
             let out = cmd.GetResult ConvertMergeDirArgs.Out
+            let inputFormat =
+                match cmd.TryGetResult ConvertMergeDirArgs.InputFormat with
+                | Some(Some inputFormat) -> Some inputFormat
+                | _ -> None
 
-            let mergedLog =
-                findFilesByFormat dir inputFormat
-                |> fun files ->
-                    printfn $"Found {files.Length} matching files in directory."
-                    files
-                |> List.map (fun f -> readOcelFile f)
-                |> List.choose id
-                |> fun files ->
-                    printfn $"Merging {files.Length} files into one."
-                    files
-                |> List.fold (fun (state: OCEL.Types.OcelLog) log -> state.MergeWith log) OCEL.Types.OcelLog.Empty
+            findFilesByFormat dir inputFormat
+            |> fun files ->
+                printfn $"Found {files.Length} matching files in directory."
+                files
+            |> fun files -> mergeAndWriteToFile outputFormat formatting files out
 
-            match outputFormat with
-            | OcelFormat.Json ->
-                let json = OCEL.OcelJson.serialize formatting mergedLog
-                printfn $"Writing log to {out}."
-                File.WriteAllText(out, json)
-            | OcelFormat.Xml ->
-                let xml = OCEL.OcelXml.serialize formatting mergedLog
-                printfn $"Writing log to {out}."
-                File.WriteAllText(out, xml)
-            | OcelFormat.LiteDb ->
-                let outDb = new LiteDatabase(out)
-                printfn $"Writing log to {out}."
-                OCEL.OcelLiteDB.serialize outDb mergedLog
-            | _ -> raise (new ArgumentOutOfRangeException(nameof(outputFormat)))
-        | None, None, Some cf, None -> raise (NotImplementedException())
-        | None, None, None, Some cmf -> raise (NotImplementedException())
+        | None, None, Some cf, None ->
+            cf.GetResult ConvertFilesArgs.Files
+            |> List.map (fun f -> f, readOcelFile f)
+            |> List.iter (fun (name, log) ->
+                match log with
+                | Some log ->
+                    let fileName = getNewFileName name (Path.GetDirectoryName name) outputFormat
+                    match outputFormat with
+                    | OcelFormat.Json ->
+                        let json = OCEL.OcelJson.serialize formatting log
+                        printfn $"Writing log to {fileName}."
+                        File.WriteAllText(fileName, json)
+                    | OcelFormat.Xml ->
+                        let xml = OCEL.OcelXml.serialize formatting log
+                        printfn $"Writing log to {fileName}."
+                        File.WriteAllText(fileName, xml)
+                    | OcelFormat.LiteDb ->
+                        let outDb = new LiteDatabase(fileName)
+                        printfn $"Writing log to {fileName}."
+                        OCEL.OcelLiteDB.serialize outDb log
+                        outDb.Dispose()
+                    | _ -> raise (new ArgumentOutOfRangeException(nameof(outputFormat)))
+                | None -> ()
+            )
+
+        | None, None, None, Some cmf ->
+            let files = cmf.GetResult ConvertMergeFilesArgs.Files
+            let out = cmf.GetResult ConvertMergeFilesArgs.Out
+            mergeAndWriteToFile outputFormat formatting files out
+
         | _ -> failwith "Only one sub-command allowed at a time."
     with e ->
         printfn "%s" e.Message
