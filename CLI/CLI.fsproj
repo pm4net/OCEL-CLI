@@ -11,7 +11,7 @@
 
   <ItemGroup>
     <PackageReference Include="Argu" Version="6.1.1" />
-    <PackageReference Include="OCEL" Version="1.2.0" />
+    <PackageReference Include="OCEL" Version="1.2.1" />
   </ItemGroup>
 
   <ItemGroup>

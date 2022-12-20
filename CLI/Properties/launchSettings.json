@@ -2,7 +2,7 @@
   "profiles": {
     "CLI": {
       "commandName": "Project",
-      "commandLineArgs": "--of xml --if json --indented cd --d C:\\Users\\jomo\\source\\repos\\PM-Thesis\\OCEL-CLI\\Samples --o C:\\Users\\jomo\\source\\repos\\PM-Thesis\\OCEL-CLI\\Output"
+      "commandLineArgs": "--of json --if xml --indented cmd --d C:\\Users\\jomo\\source\\repos\\PM-Thesis\\OCEL-CLI\\Samples --o C:\\Users\\jomo\\source\\repos\\PM-Thesis\\OCEL-CLI\\Output\\merged.jsonocel"
     }
   }
 }
