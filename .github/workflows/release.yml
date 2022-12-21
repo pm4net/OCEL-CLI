@@ -45,7 +45,6 @@ jobs:
         prerelease: false
         release_name: ${{ steps.version.outputs.version-without-v }}
         tag_name: ${{ github.ref }}
-        body_path: CHANGELOG.md
 
     - name: 'Upload Windows artifact'
       uses: actions/upload-release-asset@v1
@@ -55,7 +54,7 @@ jobs:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
         asset_path: ${{ env.PACKAGE_OUTPUT_DIRECTORY }}\win\ocel-cli.exe
         asset_name: Windows
-        asset_content_type: application/vnd.microsoft.portable-executable
+        asset_content_type: application/x-dosexec
 
     - name: 'Upload Linux artifact'
       uses: actions/upload-release-asset@v1
@@ -65,7 +64,7 @@ jobs:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
         asset_path: ${{ env.PACKAGE_OUTPUT_DIRECTORY }}\linux\ocel-cli
         asset_name: Linux
-        asset_content_type: application/gzip
+        asset_content_type: application/x-sharedlib
 
     - name: 'Upload OSX artifact'
       uses: actions/upload-release-asset@v1
@@ -75,4 +74,4 @@ jobs:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
         asset_path: ${{ env.PACKAGE_OUTPUT_DIRECTORY }}\osx\ocel-cli
         asset_name: OSX
-        asset_content_type: application/gzip
+        asset_content_type: application/x-mach-binary
