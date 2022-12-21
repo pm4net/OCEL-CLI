@@ -42,6 +42,6 @@ jobs:
         name: ${{ steps.version.outputs.version-without-v }}
         tag_name: ${{ github.ref }}
         files: |
-          ${{ env.PACKAGE_OUTPUT_DIRECTORY }}\win\ocel-cli.exe
-          ${{ env.PACKAGE_OUTPUT_DIRECTORY }}\linux\ocel-cli
-          ${{ env.PACKAGE_OUTPUT_DIRECTORY }}\osx\ocel-cli
+          ${{ env.PACKAGE_OUTPUT_DIRECTORY }}\win\*.exe
+          ${{ env.PACKAGE_OUTPUT_DIRECTORY }}\linux\*
+          ${{ env.PACKAGE_OUTPUT_DIRECTORY }}\osx\*
