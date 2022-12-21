@@ -13,11 +13,6 @@ jobs:
     name: 'Release'
     runs-on: 'windows-latest'
     steps:
-    - name: Set up Python 3.7
-      uses: actions/setup-python@v1
-      with:
-        python-version: "3.7"
-
     - name: 'Checkout'
       uses: actions/checkout@v2
 
@@ -40,16 +35,44 @@ jobs:
     - name: 'Publish for OSX'
       run: dotnet publish -r osx-x64 -c Release -o ${{ env.PACKAGE_OUTPUT_DIRECTORY }}\osx -p:AssemblyName=ocel-cli
 
-    - name: Fetch action
-      id: pl
-      uses: Rishabh510/Path-lister-action@master
+    - name: 'Create release'
+      uses: actions/create-release@v1
+      id: create_release
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
       with:
-        path: "${{ env.PACKAGE_OUTPUT_DIRECTORY }}/"
-        type: "*"
+        draft: false
+        prerelease: false
+        release_name: ${{ steps.version.outputs.version-without-v }}
+        tag_name: ${{ github.ref }}
+        body_path: CHANGELOG.md
 
-    - name: Output results
-      run: |
-        echo "Found ${{ steps.pl.outputs.path_count }} file(s) with this extension:"
-        for i in ${{ steps.pl.outputs.paths }}; do
-        echo $i
-        done
+    - name: 'Upload Windows artifact'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ${{ env.PACKAGE_OUTPUT_DIRECTORY }}\win\ocel-cli.exe
+        asset_name: Windows
+        asset_content_type: application/vnd.microsoft.portable-executable
+
+    - name: 'Upload Linux artifact'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ${{ env.PACKAGE_OUTPUT_DIRECTORY }}\linux\ocel-cli
+        asset_name: Linux
+        asset_content_type: application/gzip
+
+    - name: 'Upload OSX artifact'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ${{ env.PACKAGE_OUTPUT_DIRECTORY }}\osx\ocel-cli
+        asset_name: OSX
+        asset_content_type: application/gzip
