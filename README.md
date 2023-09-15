@@ -8,7 +8,7 @@ A CLI tool to quickly convert and/or merge multiple **Object-Centric Event Log (
 
 # Installation
 
-Run `dotnet tool install --global ocel-cli` to install the tool from NuGet. If you cloned the project locally, run `dotnet tool install --global --add-source .\nupkg\ cli` from the CLI directory.
+Run `dotnet tool install --global ocel-cli` to install the tool from NuGet. 
 
 # Usage
 
