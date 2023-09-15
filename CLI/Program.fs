@@ -115,8 +115,8 @@ let private readOcelFile (path: string) =
     try
         printfn $"Reading and deserializing {path}"
         match path with
-        | p when p.EndsWith ".json" || p.EndsWith ".jsonocel" -> path |> File.ReadAllText |> OCEL.OcelJson.deserialize |> Some
-        | p when p.EndsWith ".xml" || p.EndsWith ".xmlocel" -> path |> File.ReadAllText |> OCEL.OcelXml.deserialize |> Some
+        | p when p.EndsWith ".json" || p.EndsWith ".jsonocel" -> path |> File.ReadAllText |> OCEL.OcelJson.deserialize false |> Some
+        | p when p.EndsWith ".xml" || p.EndsWith ".xmlocel" -> path |> File.ReadAllText |> OCEL.OcelXml.deserialize false |> Some
         | p when p.EndsWith ".db" || p.EndsWith ".litedb" -> new LiteDatabase $"Filename={p};ReadOnly=true;" |> OCEL.OcelLiteDB.deserialize |> Some
         | _ -> failwith "File is not of any of the supported formats (.jsonocel, .xmlocel, .db, .litedb)."
     with
@@ -147,7 +147,7 @@ let private mergeAndWriteToFile outputFormat formatting files out =
     | OcelFormat.LiteDb ->
         let outDb = new LiteDatabase(out)
         printfn $"Writing log to {out}."
-        OCEL.OcelLiteDB.serialize outDb mergedLog
+        OCEL.OcelLiteDB.serialize false outDb mergedLog
         outDb.Dispose()
     | _ -> raise (new ArgumentOutOfRangeException(nameof(outputFormat)))
 
@@ -197,7 +197,7 @@ let main args =
                         let fileName = getNewFileName name outDir outputFormat
                         let outDb = new LiteDatabase(fileName)
                         printfn $"Writing log to {fileName}."
-                        OCEL.OcelLiteDB.serialize outDb log
+                        OCEL.OcelLiteDB.serialize false outDb log
                         outDb.Dispose()
                     | _ -> raise (new ArgumentOutOfRangeException(nameof(outputFormat)))
                 | None -> ()
@@ -236,7 +236,7 @@ let main args =
                     | OcelFormat.LiteDb ->
                         let outDb = new LiteDatabase(fileName)
                         printfn $"Writing log to {fileName}."
-                        OCEL.OcelLiteDB.serialize outDb log
+                        OCEL.OcelLiteDB.serialize false outDb log
                         outDb.Dispose()
                     | _ -> raise (new ArgumentOutOfRangeException(nameof(outputFormat)))
                 | None -> ()
