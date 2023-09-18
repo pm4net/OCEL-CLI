@@ -52,7 +52,8 @@ and ConvertMergeFilesArgs =
 
 and Args =
     | [<Mandatory; ExactlyOnce; AltCommandLine("--of")>] OutputFormat of OcelFormat
-    | Indented
+    | [<AltCommandLine("--i")>] Indented
+    | [<AltCommandLine("--nv")>] NoValidation
     | [<CliPrefix(CliPrefix.None); AltCommandLine("cd")>] ConvertDir of ParseResults<ConvertDirArgs>
     | [<CliPrefix(CliPrefix.None); AltCommandLine("cmd")>] ConvertMergeDir of ParseResults<ConvertMergeDirArgs>
     | [<CliPrefix(CliPrefix.None); AltCommandLine("cf")>] ConvertFiles of ParseResults<ConvertFilesArgs>
@@ -63,6 +64,7 @@ and Args =
             match this with
             | OutputFormat _ -> "Output format of the conversion."
             | Indented -> "Specifies that output files should be formatted using indentation."
+            | NoValidation -> "Specifies that the deserialized log(s) should not be validated before serializing again."
             | ConvertDir _ -> "Convert a directory of OCEL files."
             | ConvertMergeDir _ -> "Convert and merge a directory of OCEL files into a single file."
             | ConvertFiles _ -> "Convert one or more OCEL files."
@@ -125,7 +127,7 @@ let private readOcelFile (path: string) =
         None
 
 /// Read multiple OCEL files, merge them, and write them back to an output file in a specified format
-let private mergeAndWriteToFile outputFormat formatting files out =
+let private mergeAndWriteToFile outputFormat formatting validate files out =
     let mergedLog =
         files
         |> List.map (fun f -> readOcelFile f)
@@ -137,11 +139,11 @@ let private mergeAndWriteToFile outputFormat formatting files out =
 
     match outputFormat with
     | OcelFormat.Json ->
-        let json = OCEL.OcelJson.serialize formatting mergedLog
+        let json = OCEL.OcelJson.serialize formatting validate mergedLog
         printfn $"Writing log to {out}."
         File.WriteAllText(out, json)
     | OcelFormat.Xml ->
-        let xml = OCEL.OcelXml.serialize formatting mergedLog
+        let xml = OCEL.OcelXml.serialize formatting validate mergedLog
         printfn $"Writing log to {out}."
         File.WriteAllText(out, xml)
     | OcelFormat.LiteDb ->
@@ -158,6 +160,7 @@ let main args =
         let results = argParser.ParseCommandLine args
         let outputFormat = results.GetResult OutputFormat
         let formatting = if results.Contains Indented then OCEL.Types.Formatting.Indented else OCEL.Types.Formatting.None
+        let validate = results.Contains NoValidation |> not
 
         let cmds = 
             results.TryGetResult ConvertDir, 
@@ -185,12 +188,12 @@ let main args =
                     match outputFormat with
                     | OcelFormat.Json ->
                         let fileName = getNewFileName name outDir outputFormat
-                        let json = OCEL.OcelJson.serialize formatting log
+                        let json = OCEL.OcelJson.serialize formatting validate log
                         printfn $"Writing log to {fileName}."
                         File.WriteAllText(fileName, json)
                     | OcelFormat.Xml ->
                         let fileName = getNewFileName name outDir outputFormat
-                        let xml = OCEL.OcelXml.serialize formatting log
+                        let xml = OCEL.OcelXml.serialize formatting validate log
                         printfn $"Writing log to {fileName}."
                         File.WriteAllText(fileName, xml)
                     | OcelFormat.LiteDb ->
@@ -215,7 +218,7 @@ let main args =
             |> fun files ->
                 printfn $"Found {files.Length} matching files in directory."
                 files
-            |> fun files -> mergeAndWriteToFile outputFormat formatting files out
+            |> fun files -> mergeAndWriteToFile outputFormat formatting validate files out
 
         | None, None, Some cf, None ->
             cf.GetResult ConvertFilesArgs.Files
@@ -226,11 +229,11 @@ let main args =
                     let fileName = getNewFileName name (Path.GetDirectoryName name) outputFormat
                     match outputFormat with
                     | OcelFormat.Json ->
-                        let json = OCEL.OcelJson.serialize formatting log
+                        let json = OCEL.OcelJson.serialize formatting validate log
                         printfn $"Writing log to {fileName}."
                         File.WriteAllText(fileName, json)
                     | OcelFormat.Xml ->
-                        let xml = OCEL.OcelXml.serialize formatting log
+                        let xml = OCEL.OcelXml.serialize formatting validate log
                         printfn $"Writing log to {fileName}."
                         File.WriteAllText(fileName, xml)
                     | OcelFormat.LiteDb ->
@@ -245,7 +248,7 @@ let main args =
         | None, None, None, Some cmf ->
             let files = cmf.GetResult ConvertMergeFilesArgs.Files
             let out = cmf.GetResult ConvertMergeFilesArgs.Out
-            mergeAndWriteToFile outputFormat formatting files out
+            mergeAndWriteToFile outputFormat formatting validate files out
 
         | _ -> failwith "Only one sub-command allowed at a time."
     with e ->
