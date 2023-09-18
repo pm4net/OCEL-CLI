@@ -20,7 +20,7 @@ There are 4 main usages with a corresponding command:
 4. Convert one or more OCEL files, given their specific path, to a specific format, and merge them into a single file
 
 ```
-USAGE: ocel-cli [--help] --outputformat <json|xml|litedb> [--indented] [<subcommand> [<options>]]
+USAGE: ocel-cli [--help] --outputformat <json|xml|litedb> [--indented] [--novalidation] [<subcommand> [<options>]]
 
 SUBCOMMANDS:
 
@@ -39,7 +39,8 @@ OPTIONS:
 
     --outputformat, --of <json|xml|litedb>
                           Output format of the conversion.
-    --indented            Specifies that output files should be formatted using indentation.
+    --indented, --i       Specifies that output files should be formatted using indentation.
+    --novalidation, --nv  Specifies that the deserialized log(s) should not be validated before serializing again.
     --help                display this list of options.
 ```
 
