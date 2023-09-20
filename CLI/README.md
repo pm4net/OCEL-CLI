@@ -16,8 +16,8 @@ There are 4 main usages with a corresponding command:
 4. Convert one or more OCEL files, given their specific path, to a specific format, and merge them into a single file
 
 ```
-USAGE: ocel-cli [--help] --outputformat <json|xml|litedb> [--indented] [--removeunknownobjects] [--novalidation]
-                [<subcommand> [<options>]]
+USAGE: ocel-cli [--help] --outputformat <json|xml|litedb> [--indented] [--removeunknownobjects]
+                [--mergeduplicateobjects] [--novalidation] [<subcommand> [<options>]]
 
 SUBCOMMANDS:
 
@@ -39,6 +39,8 @@ OPTIONS:
     --indented, --i       Specifies that output files should be formatted using indentation.
     --removeunknownobjects, --ruo
                           Remove any object references from events that don't exist in the log.
+    --mergeduplicateobjects, --mdo
+                          Specifies that identical objects should be merged into one and all event references updated.
     --novalidation, --nv  Specifies that the deserialized log(s) should not be validated before serializing again.
     --help                display this list of options.
 ```

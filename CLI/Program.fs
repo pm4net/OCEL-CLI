@@ -54,6 +54,7 @@ and Args =
     | [<Mandatory; ExactlyOnce; AltCommandLine("--of")>] OutputFormat of OcelFormat
     | [<AltCommandLine("--i")>] Indented
     | [<AltCommandLine("--ruo")>] RemoveUnknownObjects
+    | [<AltCommandLine("--mdo")>] MergeDuplicateObjects
     | [<AltCommandLine("--nv")>] NoValidation
     | [<CliPrefix(CliPrefix.None); AltCommandLine("cd")>] ConvertDir of ParseResults<ConvertDirArgs>
     | [<CliPrefix(CliPrefix.None); AltCommandLine("cmd")>] ConvertMergeDir of ParseResults<ConvertMergeDirArgs>
@@ -67,6 +68,7 @@ and Args =
             | Indented -> "Specifies that output files should be formatted using indentation."
             | RemoveUnknownObjects -> "Remove any object references from events that don't exist in the log."
             | NoValidation -> "Specifies that the deserialized log(s) should not be validated before serializing again."
+            | MergeDuplicateObjects -> "Specifies that identical objects should be merged into one and all event references updated."
             | ConvertDir _ -> "Convert a directory of OCEL files."
             | ConvertMergeDir _ -> "Convert and merge a directory of OCEL files into a single file."
             | ConvertFiles _ -> "Convert one or more OCEL files."
@@ -133,7 +135,7 @@ let private readOcelFile removeUnknownObjects (path: string) =
         None
 
 /// Read multiple OCEL files, merge them, and write them back to an output file in a specified format
-let private mergeAndWriteToFile removeUnknownObjects outputFormat formatting validate files out =
+let private mergeAndWriteToFile removeUnknownObjects mergeDuplicateObjects outputFormat formatting validate files out =
     let mergedLog =
         files
         |> List.map (fun f -> readOcelFile removeUnknownObjects f)
@@ -143,6 +145,7 @@ let private mergeAndWriteToFile removeUnknownObjects outputFormat formatting val
             files
         |> List.fold (fun (state: OCEL.Types.OcelLog) log -> state.MergeWith log) OCEL.Types.OcelLog.Empty
 
+    let mergedLog = if mergeDuplicateObjects then mergedLog.MergeDuplicateObjects() else mergedLog
     match outputFormat with
     | OcelFormat.Json ->
         printfn $"Writing log to {out}."
@@ -168,6 +171,7 @@ let main args =
         let formatting = if results.Contains Indented then OCEL.Types.Formatting.Indented else OCEL.Types.Formatting.None
         let validate = results.Contains NoValidation |> not
         let removeUnknownObjects = results.Contains RemoveUnknownObjects
+        let mergeDuplicateObjects = results.Contains MergeDuplicateObjects
 
         let cmds = 
             results.TryGetResult ConvertDir, 
@@ -188,10 +192,10 @@ let main args =
             |> fun files ->
                 printfn $"Found {files.Length} matching files in directory."
                 files
-            |> List.map (fun f -> f, readOcelFile removeUnknownObjects f)
-            |> List.iter (fun (name, log) ->
-                match log with
+            |> List.iter (fun name ->
+                match name |> readOcelFile removeUnknownObjects with
                 | Some log ->
+                    let log = if mergeDuplicateObjects then log.MergeDuplicateObjects() else log
                     match outputFormat with
                     | OcelFormat.Json ->
                         let fileName = getNewFileName name outDir outputFormat
@@ -210,8 +214,7 @@ let main args =
                         OCEL.OcelLiteDB.serialize false outDb log
                         outDb.Dispose()
                     | _ -> raise (new ArgumentOutOfRangeException(nameof(outputFormat)))
-                | None -> ()
-            )
+                | None -> ())
 
         | None, Some cmd, None, None ->
             let dir = cmd.GetResult ConvertMergeDirArgs.Dir
@@ -225,14 +228,14 @@ let main args =
             |> fun files ->
                 printfn $"Found {files.Length} matching files in directory."
                 files
-            |> fun files -> mergeAndWriteToFile removeUnknownObjects outputFormat formatting validate files out
+            |> fun files -> mergeAndWriteToFile removeUnknownObjects mergeDuplicateObjects outputFormat formatting validate files out
 
         | None, None, Some cf, None ->
             cf.GetResult ConvertFilesArgs.Files
-            |> List.map (fun f -> f, readOcelFile removeUnknownObjects f)
-            |> List.iter (fun (name, log) ->
-                match log with
+            |> List.iter (fun name ->
+                match name |> readOcelFile removeUnknownObjects with
                 | Some log ->
+                    let log = if mergeDuplicateObjects then log.MergeDuplicateObjects() else log
                     let fileName = getNewFileName name (Path.GetDirectoryName name) outputFormat
                     match outputFormat with
                     | OcelFormat.Json ->
@@ -249,13 +252,12 @@ let main args =
                         OCEL.OcelLiteDB.serialize false outDb log
                         outDb.Dispose()
                     | _ -> raise (new ArgumentOutOfRangeException(nameof(outputFormat)))
-                | None -> ()
-            )
+                | None -> ())
 
         | None, None, None, Some cmf ->
             let files = cmf.GetResult ConvertMergeFilesArgs.Files
             let out = cmf.GetResult ConvertMergeFilesArgs.Out
-            mergeAndWriteToFile removeUnknownObjects outputFormat formatting validate files out
+            mergeAndWriteToFile removeUnknownObjects mergeDuplicateObjects outputFormat formatting validate files out
 
         | _ -> failwith "Only one sub-command allowed at a time."
     with e ->
