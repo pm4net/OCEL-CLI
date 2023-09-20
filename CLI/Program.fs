@@ -53,6 +53,7 @@ and ConvertMergeFilesArgs =
 and Args =
     | [<Mandatory; ExactlyOnce; AltCommandLine("--of")>] OutputFormat of OcelFormat
     | [<AltCommandLine("--i")>] Indented
+    | [<AltCommandLine("--ruo")>] RemoveUnknownObjects
     | [<AltCommandLine("--nv")>] NoValidation
     | [<CliPrefix(CliPrefix.None); AltCommandLine("cd")>] ConvertDir of ParseResults<ConvertDirArgs>
     | [<CliPrefix(CliPrefix.None); AltCommandLine("cmd")>] ConvertMergeDir of ParseResults<ConvertMergeDirArgs>
@@ -64,6 +65,7 @@ and Args =
             match this with
             | OutputFormat _ -> "Output format of the conversion."
             | Indented -> "Specifies that output files should be formatted using indentation."
+            | RemoveUnknownObjects -> "Remove any object references from events that don't exist in the log."
             | NoValidation -> "Specifies that the deserialized log(s) should not be validated before serializing again."
             | ConvertDir _ -> "Convert a directory of OCEL files."
             | ConvertMergeDir _ -> "Convert and merge a directory of OCEL files into a single file."
@@ -113,24 +115,28 @@ let private getNewFileName (inputFile: string) (outDir: string) format =
     Path.Combine(outDir, fileFullName)
 
 /// Read an OCEL file into a log object
-let private readOcelFile (path: string) =
+let private readOcelFile removeUnknownObjects (path: string) =
     try
         printfn $"Reading and deserializing {path}"
-        match path with
-        | p when p.EndsWith ".json" || p.EndsWith ".jsonocel" -> path |> File.ReadAllText |> OCEL.OcelJson.deserialize false |> Some
-        | p when p.EndsWith ".xml" || p.EndsWith ".xmlocel" -> path |> File.ReadAllText |> OCEL.OcelXml.deserialize false |> Some
-        | p when p.EndsWith ".db" || p.EndsWith ".litedb" -> new LiteDatabase $"Filename={p};ReadOnly=true;" |> OCEL.OcelLiteDB.deserialize |> Some
-        | _ -> failwith "File is not of any of the supported formats (.jsonocel, .xmlocel, .db, .litedb)."
+        let log =
+            match path with
+            | p when p.EndsWith ".json" || p.EndsWith ".jsonocel" -> path |> File.ReadAllText |> OCEL.OcelJson.deserialize false
+            | p when p.EndsWith ".xml" || p.EndsWith ".xmlocel" -> path |> File.ReadAllText |> OCEL.OcelXml.deserialize false
+            | p when p.EndsWith ".db" || p.EndsWith ".litedb" -> new LiteDatabase $"Filename={p};ReadOnly=true;" |> OCEL.OcelLiteDB.deserialize
+            | _ -> failwith "File is not of any of the supported formats (.jsonocel, .xmlocel, .db, .litedb)."
+        match removeUnknownObjects with
+        | true -> log.RemoveUnknownObjects() |> Some
+        | false -> log |> Some
     with
     | e -> 
         printfn $"Failed to read or deserialize file {path}: {e.Message}."
         None
 
 /// Read multiple OCEL files, merge them, and write them back to an output file in a specified format
-let private mergeAndWriteToFile outputFormat formatting validate files out =
+let private mergeAndWriteToFile removeUnknownObjects outputFormat formatting validate files out =
     let mergedLog =
         files
-        |> List.map (fun f -> readOcelFile f)
+        |> List.map (fun f -> readOcelFile removeUnknownObjects f)
         |> List.choose id
         |> fun files ->
             printfn $"Merging {files.Length} files into one."
@@ -139,16 +145,16 @@ let private mergeAndWriteToFile outputFormat formatting validate files out =
 
     match outputFormat with
     | OcelFormat.Json ->
-        let json = OCEL.OcelJson.serialize formatting validate mergedLog
         printfn $"Writing log to {out}."
+        let json = OCEL.OcelJson.serialize formatting validate mergedLog
         File.WriteAllText(out, json)
     | OcelFormat.Xml ->
-        let xml = OCEL.OcelXml.serialize formatting validate mergedLog
         printfn $"Writing log to {out}."
+        let xml = OCEL.OcelXml.serialize formatting validate mergedLog
         File.WriteAllText(out, xml)
     | OcelFormat.LiteDb ->
-        let outDb = new LiteDatabase(out)
         printfn $"Writing log to {out}."
+        let outDb = new LiteDatabase(out)
         OCEL.OcelLiteDB.serialize false outDb mergedLog
         outDb.Dispose()
     | _ -> raise (new ArgumentOutOfRangeException(nameof(outputFormat)))
@@ -161,6 +167,7 @@ let main args =
         let outputFormat = results.GetResult OutputFormat
         let formatting = if results.Contains Indented then OCEL.Types.Formatting.Indented else OCEL.Types.Formatting.None
         let validate = results.Contains NoValidation |> not
+        let removeUnknownObjects = results.Contains RemoveUnknownObjects
 
         let cmds = 
             results.TryGetResult ConvertDir, 
@@ -181,25 +188,25 @@ let main args =
             |> fun files ->
                 printfn $"Found {files.Length} matching files in directory."
                 files
-            |> List.map (fun f -> f, readOcelFile f)
+            |> List.map (fun f -> f, readOcelFile removeUnknownObjects f)
             |> List.iter (fun (name, log) ->
                 match log with
                 | Some log ->
                     match outputFormat with
                     | OcelFormat.Json ->
                         let fileName = getNewFileName name outDir outputFormat
-                        let json = OCEL.OcelJson.serialize formatting validate log
                         printfn $"Writing log to {fileName}."
+                        let json = OCEL.OcelJson.serialize formatting validate log
                         File.WriteAllText(fileName, json)
                     | OcelFormat.Xml ->
                         let fileName = getNewFileName name outDir outputFormat
-                        let xml = OCEL.OcelXml.serialize formatting validate log
                         printfn $"Writing log to {fileName}."
+                        let xml = OCEL.OcelXml.serialize formatting validate log
                         File.WriteAllText(fileName, xml)
                     | OcelFormat.LiteDb ->
                         let fileName = getNewFileName name outDir outputFormat
-                        let outDb = new LiteDatabase(fileName)
                         printfn $"Writing log to {fileName}."
+                        let outDb = new LiteDatabase(fileName)
                         OCEL.OcelLiteDB.serialize false outDb log
                         outDb.Dispose()
                     | _ -> raise (new ArgumentOutOfRangeException(nameof(outputFormat)))
@@ -218,27 +225,27 @@ let main args =
             |> fun files ->
                 printfn $"Found {files.Length} matching files in directory."
                 files
-            |> fun files -> mergeAndWriteToFile outputFormat formatting validate files out
+            |> fun files -> mergeAndWriteToFile removeUnknownObjects outputFormat formatting validate files out
 
         | None, None, Some cf, None ->
             cf.GetResult ConvertFilesArgs.Files
-            |> List.map (fun f -> f, readOcelFile f)
+            |> List.map (fun f -> f, readOcelFile removeUnknownObjects f)
             |> List.iter (fun (name, log) ->
                 match log with
                 | Some log ->
                     let fileName = getNewFileName name (Path.GetDirectoryName name) outputFormat
                     match outputFormat with
                     | OcelFormat.Json ->
-                        let json = OCEL.OcelJson.serialize formatting validate log
                         printfn $"Writing log to {fileName}."
+                        let json = OCEL.OcelJson.serialize formatting validate log
                         File.WriteAllText(fileName, json)
                     | OcelFormat.Xml ->
-                        let xml = OCEL.OcelXml.serialize formatting validate log
                         printfn $"Writing log to {fileName}."
+                        let xml = OCEL.OcelXml.serialize formatting validate log
                         File.WriteAllText(fileName, xml)
                     | OcelFormat.LiteDb ->
-                        let outDb = new LiteDatabase(fileName)
                         printfn $"Writing log to {fileName}."
+                        let outDb = new LiteDatabase(fileName)
                         OCEL.OcelLiteDB.serialize false outDb log
                         outDb.Dispose()
                     | _ -> raise (new ArgumentOutOfRangeException(nameof(outputFormat)))
@@ -248,7 +255,7 @@ let main args =
         | None, None, None, Some cmf ->
             let files = cmf.GetResult ConvertMergeFilesArgs.Files
             let out = cmf.GetResult ConvertMergeFilesArgs.Out
-            mergeAndWriteToFile outputFormat formatting validate files out
+            mergeAndWriteToFile removeUnknownObjects outputFormat formatting validate files out
 
         | _ -> failwith "Only one sub-command allowed at a time."
     with e ->
