@@ -1,5 +1,9 @@
 # OCEL-CLI
 
+[![GitHub](https://img.shields.io/github/license/pm4net/OCEL-CLI?style=flat-square)](https://github.com/pm4net/OCEL-CLI/blob/master/LICENSE)
+[![Nuget (with prereleases)](https://img.shields.io/nuget/vpre/OCEL-CLI?label=OCEL-CLI&style=flat-square)](https://www.nuget.org/packages/OCEL-CLI/)
+[![Nuget](https://img.shields.io/nuget/dt/OCEL-CLI?label=NuGet%20Downloads&style=flat-square)](https://www.nuget.org/packages/OCEL-CLI/#versions-body-tab)
+
 A CLI tool to quickly convert and/or merge multiple **Object-Centric Event Log (OCEL)** [1] files to the various different formats. Uses the [OCEL](https://github.com/pm4net/OCEL) library in the background.
 
 # Installation
